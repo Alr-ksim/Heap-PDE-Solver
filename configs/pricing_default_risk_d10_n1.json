@@ -1,0 +1,20 @@
+{
+  "_comment": "Nonlinear Black-Scholes equation with default risk in PNAS paper doi.org/10.1073/pnas.1718942115",
+  "eqn_type": "pricing_default_risk",
+  "total_time": 0.1,
+  "dim": 10,
+  "num_time_interval": 20,
+  "seed": 42,
+  "constraint_type": 1,
+  "feat_size": 20,
+  "feat_depth": 2,
+  "fit_n_iter": 30000,
+  "fit_bs": 64,
+  "fit_thereshold": 1e-3,
+  "train_dropout": 0.3,
+  "train_hiddens": 1000,
+  "train_bs": 64,
+  "train_epoch": 1,
+  "train_lr": 1e-4
+}
+    

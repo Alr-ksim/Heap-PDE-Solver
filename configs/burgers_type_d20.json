@@ -1,0 +1,21 @@
+{
+  "_comment": "Multidimensional Burgers-type PDE",
+  "eqn_type": "burgers_type",
+  "total_time": 0.2,
+  "dim": 20,
+  "num_time_interval": 10,
+  "seed": 42,
+  "constraint_type": 0,
+  "feat_size": 10,
+  "feat_depth": 3,
+  "fit_n_iter": 30000,
+  "fit_bs": 64,
+  "fit_thereshold": 1e-3,
+  "train_dropout": 0.2,
+  "train_hiddens": 1000,
+  "train_bs": 64,
+  "train_epoch": 1,
+  "train_lr": 1e-4,
+  "sigma_rate": 1e-3
+}
+  

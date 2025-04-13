@@ -1,0 +1,20 @@
+{
+  "_comment": "Time-dependent reaction-diffusion-type example PDE in Comm. Math. Stat. doi.org/10.1007/s40304-017-0117-6",
+  "eqn_type": "reaction_diffusion",
+  "total_time": 0.3,
+  "dim": 5,
+  "num_time_interval": 10,
+  "seed": 42,
+  "constraint_type": 0,
+  "feat_size": 10,
+  "feat_depth": 2,
+  "fit_n_iter": 30000,
+  "fit_bs": 64,
+  "fit_thereshold": 1e-3,
+  "train_dropout": 0.4,
+  "train_hiddens": 1000,
+  "train_bs": 64,
+  "train_epoch": 1,
+  "train_lr": 1e-5
+}
+  

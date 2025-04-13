@@ -1,0 +1,23 @@
+{
+  "eqn_config": {
+    "_comment": "Time-dependent reaction-diffusion-type example PDE in Comm. Math. Stat. doi.org/10.1007/s40304-017-0117-6",
+    "eqn_name": "CustomReactionDiffusion",
+    "total_time": 0.6,
+    "dim": 15,
+    "num_time_interval": 30,
+    "g_l": 0.5,
+    "g_r": 1.5
+  },
+  "net_config": {
+    "y_init_range": [1, 2],
+    "num_hiddens": [110, 110],
+    "lr_values": [1e-2, 5e-3],
+    "lr_boundaries": [1000],
+    "num_iterations": 2000,
+    "batch_size": 128,
+    "valid_size": 256,
+    "logging_frequency": 100,
+    "dtype": "float64",
+    "verbose": true
+  }
+}

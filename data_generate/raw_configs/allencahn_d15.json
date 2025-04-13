@@ -1,0 +1,17 @@
+{
+  "_comment": "Multidimensional AllenCahn PDE",
+  "eqn_type": "allencahn",
+  "total_time": 0.2,
+  "dim": 15,
+  "num_time_interval": 20,
+  "seed": 42,
+  "fit_n_iter": 30000,
+  "fit_bs": 64,
+  "fit_thereshold": 1e-3,
+  "train_dropout": 0.3,
+  "train_hiddens": 300,
+  "train_bs": 64,
+  "train_epoch": 1,
+  "train_lr": 1e-3
+}
+  
