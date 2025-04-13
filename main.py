@@ -13,7 +13,7 @@ from torchdiffeq import odeint_adjoint, odeint
 
 import numpy as np
 from utils import redirect_log_file, timing, set_seed, set_gpu_max_mem
-from network import V, U_PRICE, U_TWO, Adaptive_PDQP_Net, PDQP_Net_2_full
+from network import V, U_HJB, U_PRICE, U_TWO, Adaptive_PDQP_Net, PDQP_Net_2_full
 from calculation import d_ball_uniform, laplacian, du_dtheta_
 from equation import EqnConfig, PricingDefaultRisk, PricingDiffRate, BurgersType, ReactionDiffusion, HJBLQ, AllenCahn, HeatEquation
 
@@ -385,8 +385,9 @@ def eval(u, v, pdqp, pdqp_flag, eqn, dataloader, with_label, device, c_type=0, v
                 pred_theta_0 = inference(theta_T, u, v, eqn, eqn.total_time, pdqp)
                 L2RE = test(u, data, pred_theta_0)
                 loss_list.append(L2RE)
+                c_loss_list.append(0)
             else:
-                PINN_loss, C_loss = loss_(theta_T, u, v, pdqp, eqn, pdqp_flag, c_type=c_type, verbose=True)
+                PINN_loss, C_loss = loss_(theta_T, u, v, pdqp, eqn, pdqp_flag, c_type=c_type, verbose=False)
                 loss_list.append(PINN_loss)
                 c_loss_list.append(C_loss)
 
