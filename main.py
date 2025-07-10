@@ -69,7 +69,7 @@ def fit_theta_T(g_param, u, eqn, n_x=500, theta_init=None, n_iter=2000, seed=1, 
 
     return theta.detach(), relative_error.detach()   # (bs, n_params), (bs, )
 
-def gen_rand_test_dataset(u, eqn_config, n_samples=500):
+def gen_rand_test_dataset(u, eqn_config, n_samples=500, device=None):
     theta_0 = torch.randn(n_samples, u.n_params)
     test_dataset = torch.utils.data.TensorDataset(theta_0)
     filename = f"checkpoints/{eqn_config.eqn_type}_dataset_dim{eqn_config.dim}_params{u.n_params}_seed{eqn_config.seed}_rand.pt"
@@ -77,7 +77,7 @@ def gen_rand_test_dataset(u, eqn_config, n_samples=500):
     print(f"dataset generated, len={len(test_dataset)} saved to ", filename)
     return test_dataset
     
-def gen_test_dataset(u, eqn, eqn_config):
+def gen_test_dataset(u, eqn, eqn_config, device):
     '''
     Output a tensor dataset with at least n data samples, with 4 tensors:
         theta_T: tensor (n, n_params)
@@ -88,10 +88,6 @@ def gen_test_dataset(u, eqn, eqn_config):
     with open(f"checkpoints/{eqn_config.eqn_type}_d{eqn_config.dim}_combined_records.json", 'r') as f:
         data = json.load(f)
 
-    # with open(f"temp_qp_data.json", 'r') as f:  # only for test
-    #     data = json.load(f)
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n = len(data)
     test_dataset = [[], [], [], []]
     for i in range(n):
@@ -157,13 +153,15 @@ def test_gen_test_dataset(eqn_config, with_label):
     elif eqn_type == 'heat':
         eqn = HeatEquation(eqn_config)
 
-    u = U_TWO(eqn_config.dim, hidden_dim1=40, hidden_dim2=40)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    u = U_TWO(eqn_config.dim, hidden_dim1=40, hidden_dim2=40).to(device)
+    # u = U_PRICE(eqn_config.dim, width=200).to(device)    # For pricing diffrate equation
     
     if with_label:
-        gen_test_dataset(u=u, eqn=eqn, eqn_config=eqn_config)
+        gen_test_dataset(u=u, eqn=eqn, eqn_config=eqn_config, device=device)
     else:
         n_test_samples = 250
-        gen_rand_test_dataset(u=u, eqn_config=eqn_config, n_samples=n_test_samples)
+        gen_rand_test_dataset(u=u, eqn_config=eqn_config, n_samples=n_test_samples, device=device)
 
 
 # Generate train dataset
@@ -226,7 +224,7 @@ def loss_(theta_0, u, v, pdqp, eqn, pdqp_flag, c_type=0, verbose=False):
         elif c_type == 1:
             pdqp_b = eqn.rate * u.forward_2(theta, x).detach()
         elif c_type == 2:
-            pdqp_b = eqn.rate * u.forward_2(theta, x).detach() - eqn.lamb * heat.laplacian(u, theta, x).detach()
+            pdqp_b = eqn.rate * u.forward_2(theta, x).detach() - eqn.lamb * laplacian(u, theta, x).detach()
         else:
             pdqp_b = -100 * torch.ones((bs, n_x), device=device)
 
@@ -283,7 +281,7 @@ def loss_(theta_0, u, v, pdqp, eqn, pdqp_flag, c_type=0, verbose=False):
     loss_c_final = loss_c_container[0]
     return r_T, loss_c_final # shape = (1,)
 
-def inference(theta_0, u, v, pdqp, eqn, pdqp_flag, c_type=0):
+def inference(theta_0, u, v, pdqp, eqn, pdqp_flag, c_type=None):
     n_x = 1000  #NOTE: original:10000
     bs  = theta_0.shape[0]
     T = eqn.total_time
@@ -327,7 +325,7 @@ def inference(theta_0, u, v, pdqp, eqn, pdqp_flag, c_type=0):
         elif c_type == 1:
             pdqp_b = eqn.rate * u.forward_2(theta, x).detach()
         elif c_type == 2:
-            pdqp_b = eqn.rate * u.forward_2(theta, x).detach() - eqn.lamb * heat.laplacian(u, theta, x).detach()
+            pdqp_b = eqn.rate * u.forward_2(theta, x).detach() - eqn.lamb * laplacian(u, theta, x).detach()
         else:
             pdqp_b = -100 * torch.ones((bs, n_x), device=device)
 
@@ -382,10 +380,10 @@ def eval(u, v, pdqp, pdqp_flag, eqn, dataloader, with_label, device, c_type=0, v
         for data in dataloader:
             theta_T = data[0].to(device).float()
             if with_label:
-                pred_theta_0 = inference(theta_T, u, v, eqn, eqn.total_time, pdqp)
+                pred_theta_0 = inference(theta_T, u, v, pdqp, eqn, pdqp_flag)
                 L2RE = test(u, data, pred_theta_0)
                 loss_list.append(L2RE)
-                c_loss_list.append(0)
+                c_loss_list.append(0.0*L2RE)    # No constraint loss for no constraint pde
             else:
                 PINN_loss, C_loss = loss_(theta_T, u, v, pdqp, eqn, pdqp_flag, c_type=c_type, verbose=False)
                 loss_list.append(PINN_loss)
@@ -398,6 +396,7 @@ def eval(u, v, pdqp, pdqp_flag, eqn, dataloader, with_label, device, c_type=0, v
 def train(eqn_config, model_type='cso', drop_out=1, with_label=1, test_num=0):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     u = U_TWO(eqn_config.dim, hidden_dim1=40, hidden_dim2=40).to(device)  # target net
+    # u = U_PRICE(eqn_config.dim, width=200).to(device)    # For pricing diffrate equation
     if eqn_type == "pricing_default_risk":
         eqn = PricingDefaultRisk(eqn_config) #test on the full T.
     elif eqn_type == "pricing_diffrate":
@@ -450,7 +449,10 @@ def train(eqn_config, model_type='cso', drop_out=1, with_label=1, test_num=0):
     lr = eqn_config.train_lr
     print(f"lr={lr}")
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, list(v.parameters()) + list(pdqp.parameters())), lr=lr)  #original lr=5e-4
+
     start_time = time.time()
+    loss_mark = None
+    best_score = 1.0
     best_ckp = {'v_model_state_dict':None, 'pdqp_model_state_dict':None, 'optimizer_state_dict':None, 'test_l2re':1e10}
     os.makedirs("checkpoints", exist_ok=True)
     print(f"{v.__class__.__name__} {dropout_p=}, {eqn.total_time=}")
@@ -474,20 +476,27 @@ def train(eqn_config, model_type='cso', drop_out=1, with_label=1, test_num=0):
                 print(f'epoch {i}, batch {j}, loss {loss.item()}')
                 test_l2re, c_l2re = eval(u, v, pdqp, pdqp_flag, eqn, dataload_test, with_label, device, c_type=c_type)
 
-                print(f"Total loss in testset = [{test_l2re.item():.2f}]")
+                if loss_mark == None:
+                    loss_mark = test_l2re.item()
+                rel_loss = test_l2re.item()/loss_mark
+                cur_score = 0.3*c_l2re.item() + 0.7*rel_loss
+                print(f"Total loss in testset = [{test_l2re.item():.4f}]")
+                print(f"Relative loss in testset = [{rel_loss:.4f}]")
                 print(f"Constraint loss in testset = [{c_l2re.item():.4f}]")
                 print(f'walltime = {time.time()-start_time}', flush=True)
 
-                if test_l2re < best_ckp['test_l2re']:
+                # if test_l2re < best_ckp['test_l2re']:
+                if cur_score < best_score:
+                    best_score = cur_score
                     best_ckp['test_l2re'] = test_l2re
                     best_ckp['v_model_state_dict'] = v.state_dict()
                     best_ckp['pdqp_model_state_dict'] = pdqp.state_dict()
                     best_ckp['optimizer_state_dict'] = optimizer.state_dict()
                     print(f"best ckp updated")
                     if test_num:
-                        model_path = f"checkpoints/{eqn_config.eqn_type}_dim{eqn_config.dim}_drop{drop_out}_{model_type}_n{test_num}.pth"
+                        model_path = f"checkpoints/{eqn_config.eqn_type}_dim{eqn_config.dim}_drop{drop_out}_{model_type}_c{c_type}_n{test_num}.pth"
                     else:
-                        model_path = f"checkpoints/{eqn_config.eqn_type}_dim{eqn_config.dim}_drop{drop_out}_{model_type}.pth"
+                        model_path = f"checkpoints/{eqn_config.eqn_type}_dim{eqn_config.dim}_drop{drop_out}_{model_type}_c{c_type}.pth"
                     torch.save(best_ckp, model_path)
 
 if __name__ == "__main__":

@@ -5,7 +5,6 @@
   "dim": 10,
   "num_time_interval": 20,
   "seed": 42,
-  "constraint_type": 2,
   "feat_size": 20,
   "feat_depth": 2,
   "fit_n_iter": 30000,

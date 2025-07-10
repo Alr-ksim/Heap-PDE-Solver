@@ -1,0 +1,19 @@
+{
+  "_comment": "Multidimensional HJBLQ PDE",
+  "eqn_type": "hjb_lq",
+  "total_time": 0.4,
+  "dim": 10,
+  "num_time_interval": 20,
+  "seed": 42,
+  "feat_size": 5,
+  "feat_depth": 3,
+  "fit_n_iter": 30000,
+  "fit_bs": 64,
+  "fit_thereshold": 1e-3,
+  "train_dropout": 0.3,
+  "train_hiddens": 300,
+  "train_bs": 64,
+  "train_epoch": 1,
+  "train_lr": 1e-4
+}
+  
