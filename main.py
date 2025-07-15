@@ -356,6 +356,90 @@ def inference(theta_0, u, v, pdqp, eqn, pdqp_flag, c_type=None):
     thetaT_pred = traj[-1]
     return thetaT_pred
 
+def inference_2(theta_0, u, v, pdqp, x, eqn, pdqp_flag, c_type=None):
+    n_x = x.shape[1]
+    bs  = theta_0.shape[0]
+    T = eqn.total_time
+    n_t = eqn.num_time_interval
+    device = theta_0.device
+    p_x = 1
+
+    # --- constants of PDQP-Net ---
+    n_param = u.n_params
+    
+    # Constraints: X <= u, X >= l
+    pdqp_l = -100 * torch.ones((bs, n_param), device=device)  #NOTE: l and u must be large to cover the range of theta during training.
+    pdqp_u = 100 * torch.ones((bs, n_param), device=device)
+    
+    # initial solutions
+    pdqp_x_init = torch.zeros((bs, n_param), device=device)
+    pdqp_y_init = torch.zeros((bs, n_x), device=device)
+
+    # regularizer
+    pdqp_reg = 1e-5 * torch.eye(n_param, device=device).unsqueeze(0).repeat(bs, 1, 1)
+
+    def ode_func(t, gamma):
+        '''function used in odeint.
+        Inputs:
+            t: torch.Tensor, shape (1,) or (bs,)
+            gamma: tuple of three torch.Tensor, theta, r and r_c, shape (bs, n_param) (1, ) and (1,)
+        '''
+        theta, res = gamma
+        dtheta_dt_init_guess = v(theta) ##shape=(bs, n_param)
+
+        #--- calculate dr_dt (Eq.5) via Importance Sampling---
+        theta_rep = theta.unsqueeze(1).repeat(1, n_x,1)  #shape=(bs, n_x, n_param)
+        du_dtheta = du_dtheta_(u, theta_rep, x)  #shape=(bs, n_x, n_param)
+        t_g = torch.full((x.shape[0], x.shape[1]), T, device=device)
+        rhs = eqn.rhs(u, theta_rep, x, t_g)  #shape=(bs, n_x)
+        if c_type == 0:
+            pdqp_b = -1 * eqn.lamb * torch.ones((bs, n_x), device=device)
+        elif c_type == 1:
+            pdqp_b = eqn.rate * u.forward_2(theta, x).detach()
+        elif c_type == 2:
+            pdqp_b = eqn.rate * u.forward_2(theta, x).detach() - eqn.lamb * laplacian(u, theta, x).detach()
+        else:
+            pdqp_b = -100 * torch.ones((bs, n_x), device=device)
+
+        if (pdqp_flag):
+            # --- PDQP-Net Input ---
+            P = du_dtheta  # shape=(bs, n_x, n_param)
+            Q = torch.matmul(P.transpose(-1, -2), P)  # Q = P^T P, shape=(bs, n_param, n_param)
+            Q = Q + pdqp_reg  # NOTE: Add a small positive diagonal term to Q
+            c = - torch.matmul(P.transpose(-1, -2), rhs.unsqueeze(-1))  # c = - P^T rhs
+            c = c.squeeze(-1) # shape=(bs, n_param) 
+            
+            # Constraints: du/dt >= r*u (for pricing default risk)
+            if c_type == 1 or c_type == 2:
+                A = P
+            else:
+                A = -1.0 * P
+            # --- PDQP-Net Output ---
+            x_hat, y_hat = pdqp(dtheta_dt_init_guess, pdqp_y_init, Q, A, c, pdqp_b, pdqp_l, pdqp_u, theta)
+            dtheta_dt = x_hat
+        else:
+            dtheta_dt = dtheta_dt_init_guess
+
+        d_res = torch.zeros(res.shape).to(device)
+        
+        # if t >= (n_t*4-1)*T/(n_t*4):
+        if True:
+            du_dt = du_dtheta * dtheta_dt.unsqueeze(1)  #shape=(bs, n_x, n_param)
+            du_dt = du_dt.sum(-1)  #shape=(bs, n_x)
+            lhs = du_dt
+            d_res = ((lhs - rhs).pow(2) / p_x)
+            
+        return dtheta_dt, d_res
+    
+    
+    res = torch.zeros((bs, n_x), device=device)
+    t = torch.tensor([0, T]).to(device)  #time grid
+    traj = odeint(ode_func, y0=(theta_0, res), t=t, method='rk4', options={'step_size':T/n_t})
+    theta_traj, r_traj = traj
+    thetaT_pred = theta_traj[-1]
+    res = r_traj[-1] / (4*n_t)
+    return thetaT_pred, res
+
 def test(u, data, pred_theta_0, normed=True):
     '''function distance between label and samples of true sol.'''
     device = pred_theta_0.device
